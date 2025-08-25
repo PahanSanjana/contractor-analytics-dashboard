@@ -12,7 +12,8 @@ import {
   Snackbar,
   Tabs,
   Tab,
-  Tooltip
+  Tooltip,
+  Button
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import SearchBar from './components/SearchBar';
@@ -226,7 +227,25 @@ function App() {
     setFilteredContractors(sectorFiltered);
   }, [selectedSector, contractors]);
 
-  // Generate columns dynamically from the first contractor
+  const handleDelete = async (sheetName, rowIndex) => {
+    console.log(`Attempting to delete entry from sheet: ${sheetName}, row: ${rowIndex}`); // Debugging line
+    try {
+      const response = await fetch(`http://localhost:5000/api/contractors/${sheetName}/${rowIndex}`, {
+        method: 'DELETE',
+      });
+      const result = await response.json();
+      if (result.success) {
+        console.log(`Entry deleted from sheet '${sheetName}', row ${rowIndex}`);
+        // Refresh data after deletion
+        fetchContractors();
+      } else {
+        console.error('Failed to delete entry:', result.message);
+      }
+    } catch (error) {
+      console.error('Error deleting entry:', error);
+    }
+  };
+
   const generateColumns = () => {
     if (contractors.length === 0) return [];
 
@@ -261,10 +280,10 @@ function App() {
             if (value === null || value === undefined || value === '') {
               return <span style={{ color: '#999', fontStyle: 'italic' }}>-</span>;
             }
-            
+
             // Special formatting for rate columns
             if (colName.includes('Rate') || colName.includes('LKR') || colName.includes('USD')) {
-              const numValue = parseFloat(value.toString().replace(/[^\d.-]/g, ''));
+              const numValue = parseFloat(value.toString().replace(/[^ -]/g, ''));
               if (!isNaN(numValue)) {
                 if (colName.includes('LKR')) {
                   return `LKR ${numValue.toLocaleString()}`;
@@ -273,11 +292,11 @@ function App() {
                 }
               }
             }
-            
+
             // Enhanced cell display for multi-line content
             const cellValue = String(value);
             const hasMultipleLines = cellValue.includes('\n') || cellValue.length > 50;
-            
+
             if (hasMultipleLines) {
               return (
                 <Tooltip 
@@ -306,11 +325,11 @@ function App() {
                     cursor: 'help'
                   }}>
                     {cellValue}
-                </div>
+                  </div>
                 </Tooltip>
               );
             }
-            
+
             return (
               <Tooltip 
                 title={cellValue.length > 30 ? cellValue : ''}
@@ -368,11 +387,11 @@ function App() {
             if (value === null || value === undefined || value === '') {
               return <span style={{ color: '#999', fontStyle: 'italic' }}>-</span>;
             }
-            
+
             // Enhanced cell display for multi-line content
             const cellValue = String(value);
             const hasMultipleLines = cellValue.includes('\n') || cellValue.length > 50;
-            
+
             if (hasMultipleLines) {
               return (
                 <Tooltip 
@@ -405,7 +424,7 @@ function App() {
                 </Tooltip>
               );
             }
-            
+
             return (
               <Tooltip 
                 title={cellValue.length > 30 ? cellValue : ''}
@@ -427,6 +446,29 @@ function App() {
           },
         });
       }
+    });
+
+    // Add delete column
+    columns.push({
+      field: 'actions',
+      headerName: 'Actions',
+      flex: 0.5,
+      minWidth: 100,
+      sortable: false,
+      renderCell: (params) => {
+        const rowIndex = params.row._rowIndex;
+        const sheetName = params.row._sheetName;
+        return (
+          <Button
+            variant="outlined"
+            color="error"
+            size="small"
+            onClick={() => handleDelete(sheetName, rowIndex)}
+          >
+            Delete
+          </Button>
+        );
+      },
     });
 
     return columns;

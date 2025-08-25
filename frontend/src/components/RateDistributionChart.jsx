@@ -115,37 +115,37 @@ const RateDistributionChart = ({ data, rateKey = 'Per day Rate in LKR', chartTyp
         
         <Typography variant="body2" sx={{ mb: 2, color: '#1976d2', fontStyle: 'italic' }}>
           💡 Click on any bar to view detailed consultant information for that rate range
-        </Typography>
+      </Typography>
 
         <Box sx={{ width: '100%', height: 400 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            {chartType === 'pie' ? (
-              <PieChart>
-                <Pie
-                  data={chartData}
-                  dataKey="count"
-                  nameKey="label"
-                  cx="50%"
-                  cy="50%"
+        <ResponsiveContainer width="100%" height="100%">
+          {chartType === 'pie' ? (
+            <PieChart>
+              <Pie
+                data={chartData}
+                dataKey="count"
+                nameKey="label"
+                cx="50%"
+                cy="50%"
                   outerRadius={120}
-                  label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
                   onClick={handleBarClick}
                   style={{ cursor: 'pointer' }}
-                >
-                  {chartData.map((entry, idx) => (
-                    <Cell
-                      key={`cell-${idx}`}
-                      fill={minBuckets.includes(entry.label) ? '#43a047' : COLORS[idx % COLORS.length]}
-                    />
-                  ))}
-                </Pie>
+              >
+                {chartData.map((entry, idx) => (
+                  <Cell
+                    key={`cell-${idx}`}
+                    fill={minBuckets.includes(entry.label) ? '#43a047' : COLORS[idx % COLORS.length]}
+                  />
+                ))}
+              </Pie>
                 <Tooltip 
                   formatter={(value, name) => [value, 'Contractors']}
                   labelFormatter={(label) => `${label} LKR`}
                 />
-                <Legend />
-              </PieChart>
-            ) : (
+              <Legend />
+            </PieChart>
+          ) : (
               <BarChart 
                 data={chartData} 
                 margin={{ top: 16, right: 16, left: 0, bottom: 16 }}
@@ -172,24 +172,24 @@ const RateDistributionChart = ({ data, rateKey = 'Per day Rate in LKR', chartTyp
                   formatter={(value, name) => [value, 'Contractors']}
                   labelFormatter={(label) => `${label} LKR`}
                 />
-                <Legend />
+              <Legend />
                 <Bar 
                   dataKey="count" 
                   name="Contractors"
                   style={{ cursor: 'pointer' }}
                   onClick={(data) => handleBarClick(data)}
                 >
-                  {chartData.map((entry, idx) => (
-                    <Cell
-                      key={`cell-${idx}`}
-                      fill={minBuckets.includes(entry.label) ? '#43a047' : COLORS[idx % COLORS.length]}
-                    />
-                  ))}
-                </Bar>
-              </BarChart>
-            )}
-          </ResponsiveContainer>
-        </Box>
+                {chartData.map((entry, idx) => (
+                  <Cell
+                    key={`cell-${idx}`}
+                    fill={minBuckets.includes(entry.label) ? '#43a047' : COLORS[idx % COLORS.length]}
+                  />
+                ))}
+              </Bar>
+            </BarChart>
+          )}
+        </ResponsiveContainer>
+      </Box>
 
         {/* Chart Summary */}
         <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -211,7 +211,7 @@ const RateDistributionChart = ({ data, rateKey = 'Per day Rate in LKR', chartTyp
             Most Competitive: {minBuckets.join(', ')} LKR
           </Typography>
         </Box>
-      </Paper>
+    </Paper>
 
       {/* Consultant Details Dialog */}
       <Dialog 

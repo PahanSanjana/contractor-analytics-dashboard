@@ -12,10 +12,10 @@ app.use(cors());
 app.use(express.json());
 
 // Path to the Excel file (relative to backend folder)
-const excelFilePath = path.join(__dirname, '..', 'IC (3).xlsm');
+const excelFilePath = path.join(__dirname, '..', 'IC 2015-2025.xlsx');
 
 // Function to read and merge all sheets from Excel file
-function readExcelFile(sheetNameParam = null) {
+function readExcelFile(sheetNameParam) {
   try {
     // Check if file exists
     if (!fs.existsSync(excelFilePath)) {
@@ -33,90 +33,52 @@ function readExcelFile(sheetNameParam = null) {
 
     let allData = [];
 
-    sheetsToProcess.forEach((sheetName, index) => {
+    sheetsToProcess.forEach((sheetName) => {
       try {
         const worksheet = workbook.Sheets[sheetName];
-        
-        // Smart header detection for different sheet structures
-        let headerRowIndex = 3; // Default: start from row 4 (index 3)
-        let dataStartRowIndex = 4; // Default: start data from row 5 (index 4)
-        
-        // For 2015_IC sheet, try different header row positions
-        if (sheetName === '2015_IC') {
-          console.log(`Processing 2015_IC sheet with special logic...`);
-          
-          // Try to find the header row by looking for key columns
-          for (let rowIndex = 0; rowIndex < 10; rowIndex++) { // Check first 10 rows
-            const testRow = XLSX.utils.sheet_to_json(worksheet, {
-              header: 1,
-              defval: '',
-              blankrows: false,
-              range: rowIndex
-            });
-            
-            if (testRow.length > 0) {
-              const testHeaders = testRow[0];
-              const hasNoColumn = testHeaders.some(header => 
-                header && header.toString().toLowerCase().includes('no')
-              );
-              const hasFirstNameColumn = testHeaders.some(header => 
-                header && header.toString().toLowerCase().includes('first name')
-              );
-              
-              if (hasNoColumn && hasFirstNameColumn) {
-                headerRowIndex = rowIndex;
-                dataStartRowIndex = rowIndex + 1;
-                console.log(`Found headers for 2015_IC at row ${rowIndex + 1}`);
-                break;
-              }
-            }
-          }
-        }
-        
-        // Convert sheet to JSON with detected header row
+
+        // Convert sheet to JSON with specified headers
         const sheetData = XLSX.utils.sheet_to_json(worksheet, {
-          header: 1,
+          header: [
+            'No.',
+            'First Name',
+            'Last Name',
+            'Designation',
+            'Qualifications',
+            'Contact Details',
+            'Years of Experience',
+            'Duration (Days)',
+            'Per day Rate in LKR',
+            'Per day Rate in USD',
+            'Rate in LKR',
+            'Rate in USD'
+          ],
           defval: '',
           blankrows: false,
-          range: headerRowIndex
+          range: 0 // Start from the first row
         });
-        
+
         if (sheetData.length > 0) {
-          // Get headers from detected row
-          const headers = sheetData[0];
-          console.log(`Headers found for ${sheetName}:`, headers);
-          
-          // Process data rows starting from the row after headers
-          for (let i = 1; i < sheetData.length; i++) {
-            const row = sheetData[i];
-            const rowData = {};
-            
-            // Create object with headers as keys
-            headers.forEach((header, colIndex) => {
-              if (header !== undefined && header !== null && header !== '') {
-                rowData[header] = row[colIndex] !== undefined ? row[colIndex] : '';
-              }
-            });
-            
-            // Add sheet information
+          // Process data rows
+          sheetData.forEach((row, index) => {
+            const rowData = { ...row };
             rowData['_sheetName'] = sheetName;
             rowData['_sheetIndex'] = sheetNames.indexOf(sheetName);
-            rowData['_rowIndex'] = i + dataStartRowIndex; // Actual Excel row number
-            
+            rowData['_rowIndex'] = index + 1; // Actual Excel row number
             allData.push(rowData);
-          }
+          });
         }
-        
-        console.log(`Processed sheet "${sheetName}" with ${sheetData.length - 1} data rows starting from row 5`);
-        
+
+        console.log(`Processed sheet "${sheetName}" with ${sheetData.length} data rows starting from row 1`);
+
       } catch (sheetError) {
         console.error(`Error processing sheet "${sheetName}":`, sheetError);
       }
     });
-    
+
     console.log(`Total records processed: ${allData.length}`);
     return allData;
-    
+
   } catch (error) {
     console.error('Error reading Excel file:', error);
     throw error;
@@ -456,54 +418,25 @@ app.post('/api/contractors', (req, res) => {
     try {
       XLSX.writeFile(workbook, excelFilePath);
       console.log('Excel file written successfully');
-      
-      // Verify the data was actually written by reading it back
-      console.log('Verifying data was written...');
-      try {
-        const verificationWorkbook = XLSX.readFile(excelFilePath);
-        const verificationSheet = verificationWorkbook.Sheets[sheet];
-        const verificationData = XLSX.utils.sheet_to_json(verificationSheet, { header: 1, defval: '', range: 3 });
-        
-        console.log('Verification - Total rows after write:', verificationData.length);
-        console.log('Verification - Row at index', nextRowIndex - 3, ':', verificationData[nextRowIndex - 3]);
-        
-        // Check if our new row is there
-        if (verificationData[nextRowIndex - 3]) {
-          const writtenRow = verificationData[nextRowIndex - 3];
-          console.log('Verification - Written row data:', writtenRow);
-          
-          // Compare with what we intended to write
-          const matches = newRow.every((value, index) => 
-            String(writtenRow[index] || '') === String(value)
-          );
-          
-          if (matches) {
-            console.log('✅ VERIFICATION SUCCESS: Data matches what was written');
-          } else {
-            console.log('❌ VERIFICATION FAILED: Data does not match');
-            console.log('Expected:', newRow);
-            console.log('Actual:', writtenRow);
-          }
-        } else {
-          console.log('❌ VERIFICATION FAILED: Row not found at expected position');
-        }
-        
-      } catch (verificationError) {
-        console.error('Verification failed:', verificationError.message);
-      }
-      
-      // Remove backup if write was successful
-      try {
-        fs.unlinkSync(backupPath);
-        console.log('Backup removed');
-      } catch (cleanupError) {
-        console.warn('Could not remove backup:', cleanupError.message);
-      }
-      
+
+      // Verify by reading back
+      const verificationWorkbook = XLSX.readFile(excelFilePath);
+      const verificationSheet = verificationWorkbook.Sheets[sheet];
+      const verificationData = XLSX.utils.sheet_to_json(verificationSheet, { header: 1, defval: '', range: 3 });
+
+      console.log('Verification - Total rows after write:', verificationData.length);
+      console.log('Verification - Last row data:', verificationData[verificationData.length - 1]);
+
+      res.json({
+        success: true,
+        message: `Data added successfully to sheet '${sheet}' at row ${nextRowIndex + 1}`,
+        sheet: sheet,
+        row: nextRowIndex + 1
+      });
     } catch (writeError) {
       console.error('Error writing to Excel file:', writeError);
-      
-      // Try to restore from backup
+
+      // Attempt to restore from backup
       try {
         if (fs.existsSync(backupPath)) {
           fs.copyFileSync(backupPath, excelFilePath);
@@ -512,22 +445,13 @@ app.post('/api/contractors', (req, res) => {
       } catch (restoreError) {
         console.error('Could not restore from backup:', restoreError.message);
       }
-      
+
       return res.status(500).json({
         success: false,
         message: 'Failed to write to Excel file. Please ensure it is not open in another application.',
         error: writeError.message
       });
     }
-    
-    console.log(`New data added to sheet '${sheet}' at row ${nextRowIndex + 1}`);
-    
-    res.json({
-      success: true,
-      message: 'Data added successfully',
-      sheet: sheet,
-      row: nextRowIndex + 1
-    });
     
   } catch (error) {
     console.error('Error adding contractor data:', error);
@@ -540,9 +464,98 @@ app.post('/api/contractors', (req, res) => {
   }
 });
 
+// API endpoint to get total duration across all sheets
+app.get('/api/total-duration', (req, res) => {
+  try {
+    const contractors = readExcelFile(); // Read all sheets
+    const durationMap = new Map();
+
+    contractors.forEach(contractor => {
+      const name = `${contractor['First Name']} ${contractor['Last Name']}`;
+      const durationDays = parseInt(contractor['Duration (Days)'], 10) || 0;
+
+      console.log(`Row data for ${name}:`, contractor); // Detailed debugging line
+      console.log(`Processing ${name}: ${durationDays} days`); // Debugging line
+
+      if (durationMap.has(name)) {
+        durationMap.set(name, durationMap.get(name) + durationDays);
+      } else {
+        durationMap.set(name, durationDays);
+      }
+    });
+
+    const totalDurations = Array.from(durationMap.entries()).map(([name, totalDays]) => ({ name, totalDays }));
+
+    res.json({
+      success: true,
+      totalDurations
+    });
+  } catch (error) {
+    console.error('Error calculating total duration:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      message: 'Failed to calculate total duration'
+    });
+  }
+});
+
+// API endpoint to delete a contractor entry
+app.delete('/api/contractors/:sheetName/:rowIndex', (req, res) => {
+  try {
+    const { sheetName, rowIndex } = req.params;
+    console.log(`Deleting entry from sheet: ${sheetName}, row: ${rowIndex}`);
+
+    const workbook = XLSX.readFile(excelFilePath);
+    const worksheet = workbook.Sheets[sheetName];
+
+    if (!worksheet) {
+      return res.status(404).json({
+        success: false,
+        message: `Sheet '${sheetName}' not found`
+      });
+    }
+
+    const range = XLSX.utils.decode_range(worksheet['!ref']);
+    if (rowIndex < 4 || rowIndex > range.e.r) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid row index'
+      });
+    }
+
+    // Shift all rows after the deleted row up by one
+    for (let R = parseInt(rowIndex, 10); R <= range.e.r; ++R) {
+      for (let C = range.s.c; C <= range.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        const nextCellAddress = XLSX.utils.encode_cell({ r: R + 1, c: C });
+        worksheet[cellAddress] = worksheet[nextCellAddress];
+      }
+    }
+
+    // Update the range
+    range.e.r--;
+    worksheet['!ref'] = XLSX.utils.encode_range(range);
+
+    XLSX.writeFile(workbook, excelFilePath);
+
+    res.json({
+      success: true,
+      message: `Entry deleted from sheet '${sheetName}', row ${rowIndex}`
+    });
+  } catch (error) {
+    console.error('Error deleting contractor entry:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      message: 'Failed to delete contractor entry'
+    });
+  }
+});
+
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Contractor Dashboard Backend running on port ${PORT}`);
   console.log(`📊 API endpoint: http://localhost:${PORT}/api/contractors`);
   console.log(`🔍 Health check: http://localhost:${PORT}/api/health`);
-}); 
+});

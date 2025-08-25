@@ -34,112 +34,37 @@ const AccumulativeDuration = ({ data }) => {
   const [sortBy, setSortBy] = useState('totalDuration');
   const [sortOrder, setSortOrder] = useState('desc');
 
-  useEffect(() => {
-    if (data && data.length > 0) {
-      // Debug: Log the first few items to see the actual data structure
-      console.log('Sample data items:', data.slice(0, 3));
-      console.log('Available columns:', Object.keys(data[0]));
-      
-      // Group consultants by name and calculate accumulative duration
-      const consultantMap = new Map();
-      
-      data.forEach(item => {
-        const firstName = item['First Name'] || '';
-        const lastName = item['Last Name'] || '';
-        const fullName = `${firstName} ${lastName}`.trim();
-        const designation = item.Designation || '';
-        // Parse duration from various possible duration column names
-        let duration = 0;
-        const possibleDurationKeys = [
-          'Duration (Months/Days)',
-          'Duration',
-          'Duration (Days)',
-          'Duration (Months)',
-          'Contract Duration',
-          'Project Duration'
-        ];
-        
-        let durationValue = '';
-        for (const key of possibleDurationKeys) {
-          if (item[key] !== undefined && item[key] !== null && item[key] !== '') {
-            durationValue = item[key];
-            break;
-          }
-        }
-        
-        // Debug: Log duration parsing for first few items
-        if (data.indexOf(item) < 3) {
-          console.log('Processing item:', {
-            firstName: item['First Name'],
-            lastName: item['Last Name'],
-            durationValue: durationValue,
-            originalDuration: item['Duration (Months/Days)'],
-            fallbackDuration: item.Duration
-          });
-        }
-        
-        if (durationValue) {
-          const durationStr = durationValue.toString().toLowerCase();
-          
-          // Handle different duration formats
-          if (durationStr.includes('month') || durationStr.includes('months')) {
-            // Extract number of months and convert to days
-            const months = parseFloat(durationStr.replace(/[^\d.]/g, ''));
-            duration = months * 30; // Approximate conversion
-            if (data.indexOf(item) < 3) console.log('Parsed as months:', months, '→', duration, 'days');
-          } else if (durationStr.includes('day') || durationStr.includes('days')) {
-            // Extract number of days
-            duration = parseFloat(durationStr.replace(/[^\d.]/g, ''));
-            if (data.indexOf(item) < 3) console.log('Parsed as days:', duration);
-          } else {
-            // Try to parse as direct number (assume days)
-            duration = parseFloat(durationStr.replace(/[^\d.]/g, ''));
-            if (data.indexOf(item) < 3) console.log('Parsed as direct number:', duration);
-          }
-        }
-        
-        if (data.indexOf(item) < 3) {
-          console.log('Final duration value:', duration);
-        }
-        const rate = parseFloat(item['Per day Rate in LKR']?.toString().replace(/[^\d.]/g, '')) || 0;
-        const sheet = item._sheetName || '';
-        
-        if (fullName && fullName !== '') {
-          if (consultantMap.has(fullName)) {
-            const existing = consultantMap.get(fullName);
-            existing.totalDuration += duration;
-            existing.contracts.push({
-              sheet,
-              duration,
-              rate,
-              designation
-            });
-            existing.avgRate = (existing.avgRate + rate) / 2;
-          } else {
-            consultantMap.set(fullName, {
-              name: fullName,
-              firstName,
-              lastName,
-              totalDuration: duration,
-              avgRate: rate,
-              contracts: [{
-                sheet,
-                duration,
-                rate,
-                designation
-              }],
-              currentDesignation: designation
-            });
-          }
-        }
-      });
-      
-      const consultantsList = Array.from(consultantMap.values());
-      console.log('Final consultants data:', consultantsList.slice(0, 3));
-      console.log('Total consultants found:', consultantsList.length);
-      setConsultants(consultantsList);
+  const fetchTotalDurations = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/contractors');
+      const result = await response.json();
+      if (result.success) {
+        const totalDurations = result.data.map(contractor => {
+          const name = `${contractor['First Name']} ${contractor['Last Name']}`;
+          const totalDays = parseInt(contractor['Duration (Days)'], 10) || 0;
+          const avgRate = parseFloat(contractor['Per day Rate in LKR']) || 0;
+          return { name, totalDuration: totalDays, avgRate };
+        });
+        setConsultants(totalDurations);
+      } else {
+        console.error('Failed to fetch total durations:', result.message);
+      }
+    } catch (error) {
+      console.error('Error fetching total durations:', error);
     }
-  }, [data]);
+  };
+
+  useEffect(() => {
+    fetchTotalDurations();
+  }, []);
+
+  if (!consultants || consultants.length === 0) {
+    return (
+      <Typography variant="h6" color="textSecondary" align="center">
+        No data available.
+      </Typography>
+    );
+  }
 
   const handleSort = (field) => {
     if (sortBy === field) {
@@ -190,10 +115,15 @@ const AccumulativeDuration = ({ data }) => {
   };
 
   const formatDuration = (days) => {
-    if (!days || days === 0) return '0 days';
-    if (days < 30) return `${Math.round(days)} days`;
-    if (days < 365) return `${(days / 30).toFixed(1)} months`;
-    return `${(days / 365).toFixed(1)} years`;
+    console.log('Formatting duration for days:', days); // Debugging line
+    return `${Math.round(days)} days`;
+  };
+
+  const formatRate = (rate) => {
+    if (rate === undefined || rate === null || isNaN(rate)) {
+      return '-';
+    }
+    return rate.toLocaleString();
   };
 
   const getTopConsultants = () => {
@@ -289,7 +219,7 @@ const AccumulativeDuration = ({ data }) => {
                     {formatDuration(consultant.totalDuration)}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
-                    {consultant.contracts.length} contracts
+                    {consultant.contracts ? consultant.contracts.length : 0} contracts
                   </Typography>
                 </CardContent>
               </Card>
@@ -358,9 +288,6 @@ const AccumulativeDuration = ({ data }) => {
                     )}
                   </Box>
                 </TableCell>
-                <TableCell sx={{ backgroundColor: '#e8f5e8', fontWeight: 600 }}>
-                  Current Designation
-                </TableCell>
                 <TableCell 
                   sx={{ 
                     backgroundColor: '#e8f5e8', 
@@ -395,8 +322,8 @@ const AccumulativeDuration = ({ data }) => {
                     />
                   </TableCell>
                   <TableCell>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                      LKR {consultant.avgRate.toLocaleString()}
+                    <Typography variant="body2" color="text.secondary">
+                      {formatRate(consultant.avgRate)} LKR
                     </Typography>
                   </TableCell>
                   <TableCell>
@@ -406,7 +333,7 @@ const AccumulativeDuration = ({ data }) => {
                   </TableCell>
                   <TableCell>
                     <Chip
-                      label={`${consultant.contracts.length} contracts`}
+                      label={`${consultant.contracts ? consultant.contracts.length : 0} contracts`}
                       color="primary"
                       variant="outlined"
                       size="small"
