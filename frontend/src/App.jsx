@@ -227,15 +227,17 @@ function App() {
     setFilteredContractors(sectorFiltered);
   }, [selectedSector, contractors]);
 
-  const handleDelete = async (sheetName, rowIndex) => {
-    console.log(`Attempting to delete entry from sheet: ${sheetName}, row: ${rowIndex}`); // Debugging line
+  const handleDelete = async (sheetName, noValue) => {
+    const confirmDelete = window.confirm('Are you sure you want to delete this entry?');
+    if (!confirmDelete) return; // Exit if the user cancels the deletion
+    console.log(`Attempting to delete entry from sheet: ${sheetName}, No.: ${noValue}`); // Debugging line
     try {
-      const response = await fetch(`http://localhost:5000/api/contractors/${sheetName}/${rowIndex}`, {
+      const response = await fetch(`http://localhost:5000/api/contractors/${sheetName}/${noValue}`, {
         method: 'DELETE',
       });
       const result = await response.json();
       if (result.success) {
-        console.log(`Entry deleted from sheet '${sheetName}', row ${rowIndex}`);
+        console.log(`Entry with No. ${noValue} deleted from sheet '${sheetName}'`);
         // Refresh data after deletion
         fetchContractors();
       } else {
@@ -456,14 +458,14 @@ function App() {
       minWidth: 100,
       sortable: false,
       renderCell: (params) => {
-        const rowIndex = params.row._rowIndex;
+        const noValue = params.row['No.'];
         const sheetName = params.row._sheetName;
         return (
           <Button
             variant="outlined"
             color="error"
             size="small"
-            onClick={() => handleDelete(sheetName, rowIndex)}
+            onClick={() => handleDelete(sheetName, noValue)}
           >
             Delete
           </Button>

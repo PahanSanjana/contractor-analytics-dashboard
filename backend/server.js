@@ -504,7 +504,8 @@ app.get('/api/total-duration', (req, res) => {
 app.delete('/api/contractors/:sheetName/:rowIndex', (req, res) => {
   try {
     const { sheetName, rowIndex } = req.params;
-    console.log(`Deleting entry from sheet: ${sheetName}, row: ${rowIndex}`);
+    const noValue = parseInt(rowIndex, 10); // Use rowIndex as the 'No.' value
+    console.log(`Deleting entry from sheet: ${sheetName}, No.: ${noValue}`);
 
     const workbook = XLSX.readFile(excelFilePath);
     const worksheet = workbook.Sheets[sheetName];
@@ -516,17 +517,32 @@ app.delete('/api/contractors/:sheetName/:rowIndex', (req, res) => {
       });
     }
 
-    const range = XLSX.utils.decode_range(worksheet['!ref']);
-    if (rowIndex < 4 || rowIndex > range.e.r) {
+    const sheetData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '', range: 0 });
+    const headerRow = sheetData[0];
+
+    // Assume 'No.' is the first column (A)
+    const noIndex = 0;
+
+    console.log(`Checking 'No.' values in sheet: ${sheetName}`);
+    console.log('Sheet data:', sheetData);
+
+    const rowToDelete = sheetData.findIndex((row, index) => {
+      const currentNo = parseInt(row[noIndex], 10); // Ensure numeric comparison
+      console.log(`Row ${index + 1}: No. = ${currentNo} (type: ${typeof currentNo})`);
+      return index > 0 && currentNo === noValue;
+    });
+
+    if (rowToDelete === -1) {
+      console.error(`No matching 'No.' value found for: ${noValue}`);
       return res.status(400).json({
         success: false,
-        message: 'Invalid row index'
+        message: 'Invalid No. value'
       });
     }
 
     // Shift all rows after the deleted row up by one
-    for (let R = parseInt(rowIndex, 10); R <= range.e.r; ++R) {
-      for (let C = range.s.c; C <= range.e.c; ++C) {
+    for (let R = rowToDelete; R < sheetData.length - 1; ++R) {
+      for (let C = 0; C < sheetData[R].length; ++C) {
         const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
         const nextCellAddress = XLSX.utils.encode_cell({ r: R + 1, c: C });
         worksheet[cellAddress] = worksheet[nextCellAddress];
@@ -534,6 +550,7 @@ app.delete('/api/contractors/:sheetName/:rowIndex', (req, res) => {
     }
 
     // Update the range
+    const range = XLSX.utils.decode_range(worksheet['!ref']);
     range.e.r--;
     worksheet['!ref'] = XLSX.utils.encode_range(range);
 
@@ -541,7 +558,7 @@ app.delete('/api/contractors/:sheetName/:rowIndex', (req, res) => {
 
     res.json({
       success: true,
-      message: `Entry deleted from sheet '${sheetName}', row ${rowIndex}`
+      message: `Entry with No. ${noValue} deleted from sheet '${sheetName}'`
     });
   } catch (error) {
     console.error('Error deleting contractor entry:', error);
