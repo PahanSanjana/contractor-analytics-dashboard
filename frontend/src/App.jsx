@@ -285,13 +285,15 @@ function App() {
 
             // Special formatting for rate columns
             if (colName.includes('Rate') || colName.includes('LKR') || colName.includes('USD')) {
-              const numValue = parseFloat(value.toString().replace(/[^ -]/g, ''));
-              if (!isNaN(numValue)) {
-                if (colName.includes('LKR')) {
-                  return `LKR ${numValue.toLocaleString()}`;
-                } else if (colName.includes('USD')) {
-                  return `USD ${numValue.toLocaleString()}`;
-                }
+              const raw = typeof value === 'number' ? value : parseFloat(String(value).replace(/[^0-9.\-]/g, ''));
+              const numValue = isNaN(raw) ? 0 : raw;
+              if (colName.includes('LKR')) {
+                return `LKR ${numValue.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+              } else if (colName.includes('USD')) {
+                return `USD ${numValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+              } else {
+                // Fallback for generic rate columns
+                return numValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
               }
             }
 

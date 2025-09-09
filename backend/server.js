@@ -13,6 +13,8 @@ app.use(express.json());
 
 // Path to the Excel file (relative to backend folder)
 const excelFilePath = path.join(__dirname, '..', 'IC 2015-2025.xlsx');
+// Path to the cumulative Excel file (absolute path provided by user)
+const cumulativeExcelFilePath = path.join(__dirname, '..', 'IC Duration Cumulative.xlsx');
 
 // Function to read and merge all sheets from Excel file
 function readExcelFile(sheetNameParam) {
@@ -85,6 +87,65 @@ function readExcelFile(sheetNameParam) {
   }
 }
 
+// Function to read cumulative Excel file and return aggregated rows with Name (B), Cumulative duration (C), Cumulative cost (D)
+function readCumulativeExcelFile() {
+  try {
+    if (!fs.existsSync(cumulativeExcelFilePath)) {
+      throw new Error(`Cumulative Excel file not found at: ${cumulativeExcelFilePath}`);
+    }
+
+    const parseNumberSafe = (value) => {
+      if (value === null || value === undefined) return 0;
+      if (typeof value === 'number') return isFinite(value) ? value : 0;
+      const str = String(value).replace(/[,\s]/g, '');
+      const num = parseFloat(str);
+      return isNaN(num) ? 0 : num;
+    };
+
+    const workbook = XLSX.readFile(cumulativeExcelFilePath);
+    const sheetNames = workbook.SheetNames;
+    const aggregateByName = new Map();
+
+    sheetNames.forEach((sheetName) => {
+      try {
+        const worksheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+        if (!rows || rows.length === 0) return;
+
+        // Try to detect header row by looking for a cell containing 'name'
+        let headerIndex = 0;
+        for (let i = 0; i < Math.min(rows.length, 10); i++) {
+          const row = rows[i].map((c) => String(c).toLowerCase());
+          if (row.some((c) => c.includes('name'))) {
+            headerIndex = i;
+            break;
+          }
+        }
+
+        for (let r = headerIndex + 1; r < rows.length; r++) {
+          const row = rows[r] || [];
+          const name = String(row[1] || '').trim(); // Column B
+          const durationDays = parseNumberSafe(row[2]); // Column C
+          const cumulativeCost = parseNumberSafe(row[3]); // Column D
+          if (!name) continue;
+
+          const prev = aggregateByName.get(name) || { name, totalDuration: 0, cumulativeCost: 0 };
+          prev.totalDuration += durationDays;
+          prev.cumulativeCost += cumulativeCost;
+          aggregateByName.set(name, prev);
+        }
+      } catch (sheetError) {
+        console.error(`Error processing cumulative sheet "${sheetName}":`, sheetError);
+      }
+    });
+
+    return Array.from(aggregateByName.values());
+  } catch (error) {
+    console.error('Error reading cumulative Excel file:', error);
+    throw error;
+  }
+}
+
 // API endpoint to get all contractor data (optionally for a specific sheet)
 app.get('/api/contractors', (req, res) => {
   try {
@@ -103,6 +164,23 @@ app.get('/api/contractors', (req, res) => {
       error: error.message,
       message: 'Failed to read contractor data',
     });
+  }
+});
+
+// API endpoint to get total duration aggregated by person from the cumulative Excel file
+app.get('/api/cumulative-total-duration', (req, res) => {
+  try {
+    const data = readCumulativeExcelFile().map(item => ({
+      name: item.name,
+      totalDuration: Number(item.totalDuration) || 0,
+      cumulativeCost: Number(item.cumulativeCost) || 0,
+      avgRate: (Number(item.totalDuration) ? (Number(item.cumulativeCost) || 0) / Number(item.totalDuration) : 0)
+    }));
+
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Error calculating cumulative total duration:', error);
+    res.status(500).json({ success: false, message: 'Failed to calculate cumulative total duration', error: error.message });
   }
 });
 

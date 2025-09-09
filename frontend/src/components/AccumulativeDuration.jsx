@@ -31,20 +31,24 @@ import {
 const AccumulativeDuration = ({ data }) => {
   const [consultants, setConsultants] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [committedSearch, setCommittedSearch] = useState('');
   const [sortBy, setSortBy] = useState('totalDuration');
   const [sortOrder, setSortOrder] = useState('desc');
 
   const fetchTotalDurations = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/contractors');
+      const response = await fetch('http://localhost:5000/api/cumulative-total-duration');
       const result = await response.json();
       if (result.success) {
-        const totalDurations = result.data.map(contractor => {
-          const name = `${contractor['First Name']} ${contractor['Last Name']}`;
-          const totalDays = parseInt(contractor['Duration (Days)'], 10) || 0;
-          const avgRate = parseFloat(contractor['Per day Rate in LKR']) || 0;
-          return { name, totalDuration: totalDays, avgRate };
-        });
+        const totalDurations = (result.data || []).map(item => ({
+          name: item.name || '',
+          totalDuration: Number(item.totalDuration) || 0,
+          avgRate: Number(item.avgRate) || 0,
+          cumulativeCost: item.cumulativeCost !== undefined && item.cumulativeCost !== null
+            ? Number(item.cumulativeCost) || 0
+            : (Number(item.totalDuration) || 0) * (Number(item.avgRate) || 0),
+          contracts: []
+        }));
         setConsultants(totalDurations);
       } else {
         console.error('Failed to fetch total durations:', result.message);
@@ -76,10 +80,11 @@ const AccumulativeDuration = ({ data }) => {
   };
 
   const getSortedConsultants = () => {
-    const filtered = consultants.filter(consultant =>
-      consultant.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      consultant.currentDesignation.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filtered = consultants.filter(consultant => {
+      const name = (consultant.name || '').toLowerCase();
+      const term = (committedSearch || '').toLowerCase();
+      return name.includes(term);
+    });
 
     return filtered.sort((a, b) => {
       let aVal, bVal;
@@ -93,13 +98,9 @@ const AccumulativeDuration = ({ data }) => {
           aVal = a.totalDuration;
           bVal = b.totalDuration;
           break;
-        case 'avgRate':
-          aVal = a.avgRate;
-          bVal = b.avgRate;
-          break;
-        case 'contracts':
-          aVal = a.contracts.length;
-          bVal = b.contracts.length;
+        case 'cumulativeCost':
+          aVal = a.cumulativeCost;
+          bVal = b.cumulativeCost;
           break;
         default:
           aVal = a.totalDuration;
@@ -115,15 +116,15 @@ const AccumulativeDuration = ({ data }) => {
   };
 
   const formatDuration = (days) => {
-    console.log('Formatting duration for days:', days); // Debugging line
-    return `${Math.round(days)} days`;
+    const value = Number(days);
+    if (Number.isNaN(value) || value < 0) return '0 days';
+    return `${Math.round(value)} days`;
   };
 
-  const formatRate = (rate) => {
-    if (rate === undefined || rate === null || isNaN(rate)) {
-      return '-';
-    }
-    return rate.toLocaleString();
+  const formatCurrency = (amount) => {
+    const value = Number(amount);
+    if (amount === null || amount === undefined || Number.isNaN(value)) return '0 LKR';
+    return value.toLocaleString('en-LK', { style: 'currency', currency: 'LKR', maximumFractionDigits: 0 }).replace('LKR', '').trim() + ' LKR';
   };
 
   const getTopConsultants = () => {
@@ -147,15 +148,23 @@ const AccumulativeDuration = ({ data }) => {
           <Grid item xs={12} md={6}>
             <TextField
               fullWidth
-              placeholder="Search consultants by name or designation..."
+              placeholder="Search consultants by name..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') setCommittedSearch(searchTerm); }}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
                     <Search color="success" />
                   </InputAdornment>
                 ),
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton color="success" onClick={() => setCommittedSearch(searchTerm)} aria-label="search">
+                      <Search />
+                    </IconButton>
+                  </InputAdornment>
+                )
               }}
               sx={{
                 backgroundColor: 'white',
@@ -171,8 +180,8 @@ const AccumulativeDuration = ({ data }) => {
               <Chip
                 icon={<Sort />}
                 label={`Sort: ${sortBy === 'totalDuration' ? 'Duration' : 
-                       sortBy === 'avgRate' ? 'Rate' : 
-                       sortBy === 'name' ? 'Name' : 'Contracts'}`}
+                       sortBy === 'cumulativeCost' ? 'Cost' : 
+                       'Name'}`}
                 color="success"
                 variant="outlined"
               />
@@ -219,7 +228,7 @@ const AccumulativeDuration = ({ data }) => {
                     {formatDuration(consultant.totalDuration)}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
-                    {consultant.contracts ? consultant.contracts.length : 0} contracts
+                    Cost: {formatCurrency(consultant.cumulativeCost)}
                   </Typography>
                 </CardContent>
               </Card>
@@ -248,7 +257,7 @@ const AccumulativeDuration = ({ data }) => {
                 >
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     <Person sx={{ mr: 1 }} />
-                    Consultant Name
+                    Name
                     {sortBy === 'name' && (
                       <Sort sx={{ ml: 1, transform: sortOrder === 'desc' ? 'rotate(180deg)' : 'none' }} />
                     )}
@@ -265,7 +274,7 @@ const AccumulativeDuration = ({ data }) => {
                 >
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     <Schedule sx={{ mr: 1 }} />
-                    Total Duration
+                    Cumulative duration (days)
                     {sortBy === 'totalDuration' && (
                       <Sort sx={{ ml: 1, transform: sortOrder === 'desc' ? 'rotate(180deg)' : 'none' }} />
                     )}
@@ -278,29 +287,12 @@ const AccumulativeDuration = ({ data }) => {
                     cursor: 'pointer',
                     '&:hover': { backgroundColor: '#c8e6c9' }
                   }}
-                  onClick={() => handleSort('avgRate')}
+                  onClick={() => handleSort('cumulativeCost')}
                 >
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     <TrendingUp sx={{ mr: 1 }} />
-                    Avg. Rate (LKR)
-                    {sortBy === 'avgRate' && (
-                      <Sort sx={{ ml: 1, transform: sortOrder === 'desc' ? 'rotate(180deg)' : 'none' }} />
-                    )}
-                  </Box>
-                </TableCell>
-                <TableCell 
-                  sx={{ 
-                    backgroundColor: '#e8f5e8', 
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    '&:hover': { backgroundColor: '#c8e6c9' }
-                  }}
-                  onClick={() => handleSort('contracts')}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <FilterList sx={{ mr: 1 }} />
-                    Contracts
-                    {sortBy === 'contracts' && (
+                    Cumulative cost
+                    {sortBy === 'cumulativeCost' && (
                       <Sort sx={{ ml: 1, transform: sortOrder === 'desc' ? 'rotate(180deg)' : 'none' }} />
                     )}
                   </Box>
@@ -323,21 +315,8 @@ const AccumulativeDuration = ({ data }) => {
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2" color="text.secondary">
-                      {formatRate(consultant.avgRate)} LKR
+                      {formatCurrency(consultant.cumulativeCost)}
                     </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2" color="text.secondary">
-                      {consultant.currentDesignation}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      label={`${consultant.contracts ? consultant.contracts.length : 0} contracts`}
-                      color="primary"
-                      variant="outlined"
-                      size="small"
-                    />
                   </TableCell>
                 </TableRow>
               ))}
